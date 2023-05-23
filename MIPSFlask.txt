@@ -1,0 +1,259 @@
+.data
+# DONOTMODIFYTHISLINE
+frameBuffer: .space 0x80000 #512 wide X 256 high pixels
+w: .word 132
+h: .word 50
+l: .word 76
+bgcol: .word 0x00E8CC9C
+# DONOTMODIFYTHISLINE
+# Your variables go BELOW here only (and above .text)
+
+.text
+la $t0, frameBuffer
+lw $t1, bgcol #t1 ← RGB value stored in bgcol
+
+#Check for valid bgcol
+addi $t2, $zero, 0x00FFFFFF #t2 ← maximum RGB value
+slt $t9, $t2, $t1 #if bgcol > t2, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid bgcol), jump to End; else continue
+
+#Create background
+addi $t2, $t0, 524288 #t2 ← frameBuffer + 524288
+BgLoop: sw $t1, 0($t0) #save bgcol to Bitmap Display
+addi $t0, $t0, 4 #frameBuffer ← frameBuffer + 4
+bne $t0, $t2, BgLoop #if t0 ≠ t2, go to BgLoop; else continue
+
+
+#Check for valid input:
+#Check that w is not too small
+lw $t1, w #t1 ← width
+addi $t2, $zero, 61 #t2 ← 61
+slt $t9, $t1, $t2 #if w < 61, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid width), jump to End; else continue
+
+#Calculate that w is not too large
+addi $t2, $zero, 512 #t2 ← 512
+slt $t9, $t2, $t1 #if w > 512, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid width), jump to End; else continue
+
+#Check that w is not odd
+SubW: addi $t1, $t1, -2 #t1 ← width - 2
+beq $t1, 59, End #if t1 = 59 (odd width), jump to End; else continue
+bne $t1, 60, SubW #if t1 ≠ 60, jump to SubW; else continue
+
+#Check that h is not too small
+lw $t1, h #t1 ← height
+addi $t2, $zero, 1 #t2 ← 1
+slt $t9, $t1, $t2 #if h < 1, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid height), jump to End; else continue
+
+#Check that l is not too small
+lw $t1, l #t1 ← length
+addi $t2, $zero, 1 #t2 ← 1
+slt $t9, $t1, $t2 #if l < 1, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid length), jump to End; else continue
+
+#Calculate total height
+lw $t1, w #t1 ← width
+lw $t2, h #t2 ← height
+lw $t3, l #t3 ← length
+addi $t1, $t1, -48 #t1 ← width - 48
+HalfW: addi $t1, $t1, -2 #t1 ← width - 2
+addi $t4, $t4, 1 #t4 ← t4 + 1
+bne $t1, $zero, HalfW #if t1 ≠ 0 jump to HalfW; else continue
+add $t5, $t2, $t3 #t5 ← h + l
+add $t5, $t5, $t4 #t5 ← h + l + x, where x is height of flask slope
+addi $t5, $t5, 64 #t5 ← h + l + x + 64, total height of flask
+
+#Check that total height is not odd
+add $t6, $zero, $t5 #t6 ← total height of flask
+SubTotH: addi $t6, $t6, -2 #t6 ← total height - 2
+beq $t6, 1, End #if t6 = 1 (odd total height) jump to End; else continue
+bne $t6, 2, SubTotH #if t6 ≠ 2, jump to SubTotH; else continue
+
+#Check that total height is not too large
+addi $t2, $zero, 256 #t2 ← 256
+slt  $t9, $t2, $t5 #if total height > 256, t9 ← 1; else t9 ← 0
+beq $t9, 1, End #if t9 = 1 (invalid total height), jump to End; else continue
+
+#Calculate flask starting point from bottom vertically:
+#Calculate half of total height
+add $t3, $zero, $t5 #t3 ← total height of flask
+add $t1, $zero, $zero #t1 ← 0
+HalfTotH: addi $t3, $t3, -2 #t3 ← total height - 2
+addi $t1, $t1, 1 #t1 ← t1 + 1
+bne $t3, $zero, HalfTotH #if t1 ≠ 0, jump to HalfTotH; else continue
+#Subtract (total height/2) from (screen height/2)
+addi $t3, $zero, 128 #t3 ← 128
+sub $t3, $t3, $t1 #t3 ← 128 - (total height/2), aka top/bottom outside border length
+
+#Calculate flask starting point from side horizontally:
+#Calculate half of width
+addi $t4, $t4, 24 #t4 ← t4 + 24
+#Subtract (width/2) from (screen width/2)
+addi $t2, $zero, 256 #t2 ← 256
+sub $t2, $t2, $t4 #t2 ← 256 - (width/2), aka side outside border length
+add $t2, $t2, $t2 #t2 ← 2*t2
+add $t2, $t2, $t2 #t2 ← 4*t2
+
+#Calculate liquid color:
+#Get R value of bgcol
+lw $t1, bgcol #t1 ← RGB value stored in bgcol
+addi $t6, $zero, 0 #t6 ← 0
+srl $t6, $t1, 16 #t6 ← t1 shifted right 16 bits, aka R value of bgcol
+#Get G value of bgcol
+addi $t7, $zero, 0 #t7 ← 0
+sll $t7, $t1, 16 #t7 ← t1 shifted left 16 bits
+srl $t7, $t7, 24 #t7 ← t7 shifted right 24 bits, aka G value of bgcol
+#Get B value of bgcol
+addi $t8, $zero, 0 #t8 ← 0
+sll $t8, $t1, 24 #t8 ← t1 shifted left 24 bits
+srl $t8, $t8, 24 #t8 ← t6 shifted right 24 bits, aka B value of bgcol
+#Store liquid color using RGB values with R and B swapped
+addi $t1, $zero, 0 #t1 ← 0
+add $t1, $t1, $t8 #t1 ← t8, B value
+sll $t1, $t1, 8 #t1 ← t1 shifted left 8 bits
+add $t1, $t1, $t7 #t1 ← t7, G value
+sll $t1, $t1, 8 #t1 ← t1 shifted left 8 bits
+add $t1, $t1, $t6 #t1 ← t6, R value
+
+#Create flask body (liquid):
+la $t0, frameBuffer
+#Center flask horizontally
+addi $t0, $t0, 524288 #t0 ← addr. of framebuffer + 524288
+sub $t0, $t0, $t2 #t0 ← t0 - t2
+#Center flask vertically
+add $t5, $zero, $t3 #t5 ← t3
+SubBorder: addi $t0, $t0, -2048 #t0 ← t0 - 2048
+addi $t5, $t5, -1 #t5 ← t5 - 1
+bne $t5, $zero, SubBorder #if t5 ≠ 0, jump to SubBorder; else continue
+#Create rectangle from right to left
+lw $t5, l #t5 ← length
+lw $t6, w #t6 ← width
+add $t6, $t6, $t6 #t6 ← 2*t6
+add $t6, $t6, $t6 #t6 ← 4*t6
+addi $t7, $zero, 0 #t7 ← 0
+LqLoop1: addi $t3, $zero, 0 #t3 ← 0
+LqLoop2: sw $t1, 0($t0) #save liquid color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t3, $t3, 4 #t3 ← t3 + 1
+bne $t3, $t6, LqLoop2 #if t3 ≠ t6, jump to LqLoop2; else continue
+addi $t7, $t7, 1 # t7 ← t7 + 1
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+bne $t7, $t5, LqLoop1 #if t7 ≠ t5, jump to LqLoop1; else continue
+
+#Calculate flask glass color:
+lw $t1, bgcol #t1 ← RGB value stored in bgcol
+addi $t6, $zero, 0 #t6 ← 0
+srl $t6, $t1, 16 #t6 ← t1 shifted right 16 bits, aka R value of bgcol
+addi $t7, $zero, 0 #t7 ← 0
+sll $t7, $t1, 16 #t7 ← t1 shifted left 16 bits
+srl $t7, $t7, 24 #t7 ← t7 shifted right 24 bits, aka G value of bgcol
+#Calculate half of R value of bgcol
+add $t1, $zero, $t6 #t1 ← t6
+addi $t6, $zero, 2 #t6 ← 2
+addi $t3, $zero, 0 #t3 ← 0
+HalfR: addi $t1, $t1, -2 #t1 ← R value - 2
+addi $t3, $t3, 1 #t3 ← t3 + 1
+slt $t9, $t1, $t6 #if t1 < t6, t9 ← 1; else t9 ← 0
+bne $t9, 1, HalfR #if t9 ≠ 1 jump to HalfR; else continue
+#Calulate half of G value of bgcol
+add $t1, $zero, $t7 #t1 ← t7
+addi $t4, $zero, 0 #t4 ← 0
+HalfG: addi $t1, $t1, -2 #t1 ← G value - 2
+addi $t4, $t4, 1 #t4 ← t4 + 1
+slt $t9, $t1, $t6 #if t1 < t6, t9 ← 1; else t9 ← 0
+bne $t9, 1, HalfG #if t9 ≠ 1 jump to HalfG; else continue
+#Calculate half of B value of bgcol
+add $t1, $zero, $t8 #t1 ← t8
+addi $t5, $zero, 0 #t5 ← 0
+HalfB: addi $t1, $t1, -2 #t1 ← B value - 2
+addi $t5, $t5, 1 #t5 ← t5 + 1
+slt $t9, $t1, $t6 #if t1 < t6, t9 ← 1; else t9 ← 0
+bne $t9, 1, HalfB #if t9 ≠ 1 jump to HalfB; else continue
+#Store flask glass color using halved RGB values
+addi $t1, $zero, 0 #t1 ← 0
+add $t1, $t1, $t3 #t1 ← t3, (R value)/2
+sll $t1, $t1, 8 #t1 ← t1 shifted left 8 bits
+add $t1, $t1, $t4 #t1 ← t4, (G value)/2
+sll $t1, $t1, 8 #t1 ← t1 shifted left 8 bits
+add $t1, $t1, $t5 #t1 ← t5, (B value)/2
+
+
+#Create flask body (empty)
+lw $t3, h #t3 ← height
+lw $t4, w #t4 ← width
+add $t4, $t4, $t4 #t4 ← 2*t4
+add $t4, $t4, $t4 #t4 ← 4*t4
+addi $t5, $zero, 0 #t5 ← 0
+GLoop1: addi $t6, $zero, 0 #t6 ← 0
+GLoop2: sw $t1, 0($t0) #save glass color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t6, $t6, 4 #t6 ← t6 + 1
+bne $t6, $t4, GLoop2 #if t6 ≠ t4, jump to GLoop2; else continue
+addi $t5, $t5, 1 # t5 ← t5 + 1
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+bne $t5, $t3, GLoop1 #if t5 ≠ t3, jump to GLoop1; else continue
+
+
+#Create tapered part of flask
+lw $t3, w #t3 ← width
+addi $t5, $zero, 0 #t5 ← 0
+FirstLine: sw $t1, 0($t0) #save glass color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t5, $t5, 1 #t5 ← t5 + 1
+bne $t5, $t3, FirstLine #if t5 ≠ t3, jump to FirstLine; else continue
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+TLoop1: addi $t5, $zero, 0 #t5 ← 0
+addi $t6, $zero, 0  #t6 ← 0
+addi $t2, $t2, 4 #t2 ← t2 + 4
+addi $t3, $t3, -2 #t3 ← t3 - 2
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+TLoop2: sw $t1, 0($t0) #save glass color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t5, $t5, 1 #t5 ← t5 + 1
+addi $t6, $t6, 1  #t6 ← t6 + 1
+bne $t6, $t3, TLoop2 #if t6 ≠ t3, jump to TLoop2; else continue
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+bne $t5, 50, TLoop1 #if t5 ≠ 50, jump to TLoop1; else continue
+
+
+#Create flask nozzle
+addi $t4, $zero, 32 #t4 ← 32
+addi $t5, $zero, 0 #t5 ← 0
+addi $t6, $zero, 0 #t6 ← 0
+NLoop1: addi $t5, $zero, 0 #t5 ← 0
+addi $t6, $t6, 1 #t6 ← t6 + 1
+NLoop2: sw $t1, 0($t0) #save glass color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t5, $t5, 1 #t5 ← t5 + 1
+bne $t5, $t3, NLoop2 #if t5 ≠ t3, jump to NLoop2; else continue
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+bne $t6, $t4, NLoop1 #if t6 ≠ t4, jump to NLoop1; else continue
+
+
+#Create flask cap
+addi $t1, $zero, 0x000000FF #t1 ← blue
+addi $t0, $t0, 24 #frameBuffer ← frameBuffer + 24
+addi $t2, $t2, -24
+addi $t3, $t3, 12 #t3 ← t3 + 12
+addi $t5, $zero, 0 #t5 ← 0
+addi $t6, $zero, 0 #t6 ← 0
+CLoop1: addi $t5, $zero, 0 #t5 ← 0
+addi $t6, $t6, 1 #t6 ← t6 + 1
+CLoop2: sw $t1, 0($t0) #save glass color to Bitmap Display
+addi $t0, $t0, -4 #frameBuffer ← frameBuffer - 4
+addi $t5, $t5, 1 #t5 ← t5 + 1
+bne $t5, $t3, CLoop2 #if t5 ≠ t3, jump to CLoop2; else continue
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - t2
+sub $t0, $t0, $t2 #frameBuffer ← frameBuffer - 2*t2
+bne $t6, $t4, CLoop1 #if t6 ≠ t4, jump to CLoop1; else continue
+
+
+End: li $v0, 10 # exit code
+syscall # exit code to OS
